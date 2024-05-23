@@ -11,13 +11,18 @@ from PIL import Image
 import sys
 import time
 
+# Încarcă clasificatorul Haar pentru detectarea feței
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Încarcă predictorul de puncte caracteristice pentru față (68 de puncte)
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# Încarcă modelul de recunoaștere facială
 face_recognizer = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
 
+# Conectează la baza de date SQLite
 conn = sqlite3.connect('faces.db')
 c = conn.cursor()
 
+# Creează tabelul de prezență dacă nu există deja
 c.execute('''
 CREATE TABLE IF NOT EXISTS presence (
     profile_id INTEGER PRIMARY KEY,
@@ -28,8 +33,10 @@ CREATE TABLE IF NOT EXISTS presence (
 ''')
 conn.commit()
 
+# Dicționar pentru stocarea fețelor cunoscute
 known_faces = {}
 
+# Funcție pentru actualizarea fețelor cunoscute din baza de date
 def update_known_faces():
     global known_faces
     known_faces.clear()
@@ -45,6 +52,7 @@ def update_known_faces():
 
 update_known_faces()
 
+# Inițializează camerele video pentru intrare și ieșire
 entrance_cap = cv2.VideoCapture(0)
 entrance_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 entrance_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -58,6 +66,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("Face Recognition and Presence Verification")
+        # Stilizează interfața
         self.setStyleSheet("""
             QWidget {
                 background-color: #2c3e50;
@@ -84,14 +93,17 @@ class MainWindow(QWidget):
             }
         """)
 
+        # Inițializează etichetele pentru afișarea fluxului video
         self.entrance_video_label = QLabel(self)
         self.exit_video_label = QLabel(self)
 
+        # Inițializează câmpul pentru introducerea numelui profilului și butonul de creare profil
         self.entry_profile_name = QLineEdit(self)
         self.entry_profile_name.setPlaceholderText("Enter profile name")
         self.create_profile_button = QPushButton("Create Profile", self)
         self.create_profile_button.clicked.connect(self.save_profile)
 
+        # Inițializează lista de profiluri și butoanele de control
         self.selected_folder_label = QLabel("Profiles", self)
         self.selected_folder = QListWidget(self)
         self.update_profile_list()
@@ -109,6 +121,7 @@ class MainWindow(QWidget):
         self.exit_button = QPushButton("Exit", self)
         self.exit_button.clicked.connect(self.close)
 
+        # Inițializează lista de prezențe și câmpul de căutare
         self.presence_list_label = QLabel("Present Profiles", self)
         self.presence_list = QListWidget(self)
 
@@ -116,6 +129,7 @@ class MainWindow(QWidget):
         self.search_presence_var.setPlaceholderText("Search presence")
         self.search_presence_var.textChanged.connect(self.search_presence)
 
+        # Aranjează componentele în layout-uri
         video_layout = QHBoxLayout()
         video_layout.addWidget(self.entrance_video_label)
         video_layout.addWidget(self.exit_video_label)
@@ -145,6 +159,7 @@ class MainWindow(QWidget):
 
         self.setLayout(main_layout)
 
+        # Inițializează timer-ele pentru actualizarea fluxului video și a listei de prezențe
         self.entrance_timer = QTimer()
         self.entrance_timer.timeout.connect(self.update_entrance_video_feed)
         self.entrance_timer.start(30)
@@ -157,18 +172,21 @@ class MainWindow(QWidget):
         self.presence_timer.timeout.connect(self.update_presence_list)
         self.presence_timer.start(10000)
 
+    # Funcție pentru actualizarea fluxului video de la intrare
     def update_entrance_video_feed(self):
         ret, frame = entrance_cap.read()
         if ret:
             self.process_frame(frame, "entrance")
             self.display_frame(frame, self.entrance_video_label)
 
+    # Funcție pentru actualizarea fluxului video de la ieșire
     def update_exit_video_feed(self):
         ret, frame = exit_cap.read()
         if ret:
             self.process_frame(frame, "exit")
             self.display_frame(frame, self.exit_video_label)
 
+    # Funcție pentru procesarea unui cadru video
     def process_frame(self, frame, camera_type):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
@@ -204,6 +222,7 @@ class MainWindow(QWidget):
                 cv2.putText(frame, "Unknown", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 2)
         conn.close()
 
+    # Funcție pentru afișarea unui cadru video într-un QLabel
     def display_frame(self, frame, label):
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = frame.shape
@@ -211,6 +230,7 @@ class MainWindow(QWidget):
         pixmap = QPixmap.fromImage(qimg)
         label.setPixmap(pixmap)
 
+    # Funcție pentru salvarea unui profil nou
     def save_profile(self):
         name = self.entry_profile_name.text()
         if name:
@@ -226,6 +246,7 @@ class MainWindow(QWidget):
         else:
             QMessageBox.warning(self, "Input Error", "Please enter a profile name.")
 
+    # Funcție pentru actualizarea listei de profiluri
     def update_profile_list(self):
         self.selected_folder.clear()
         conn = sqlite3.connect('faces.db')
@@ -236,6 +257,7 @@ class MainWindow(QWidget):
             self.selected_folder.addItem(profile[0])
         conn.close()
 
+    # Funcție pentru capturarea unei imagini pentru un profil selectat
     def capture_image(self):
         selected_profile = self.selected_folder.currentItem()
         if selected_profile:
@@ -263,6 +285,7 @@ class MainWindow(QWidget):
         else:
             QMessageBox.warning(self, "Selection Error", "Please select a profile to capture an image.")
 
+    # Funcție pentru ștergerea unui profil selectat
     def delete_profile(self):
         selected_profile = self.selected_folder.currentItem()
         if selected_profile:
@@ -281,6 +304,7 @@ class MainWindow(QWidget):
         else:
             QMessageBox.warning(self, "Selection Error", "Please select a profile to delete.")
 
+    # Funcție pentru actualizarea listei de prezențe
     def update_presence_list(self):
         self.presence_list.clear()
         conn = sqlite3.connect('faces.db')
@@ -291,16 +315,19 @@ class MainWindow(QWidget):
             self.presence_list.addItem(f"{profile[0]} - Entered at {profile[1]}")
         conn.close()
 
+    # Funcție pentru căutarea profilurilor în lista de profiluri
     def search_profiles(self, text):
         for i in range(self.selected_folder.count()):
             item = self.selected_folder.item(i)
             item.setHidden(text.lower() not in item.text().lower())
 
+    # Funcție pentru căutarea profilurilor în lista de prezențe
     def search_presence(self, text):
         for i in range(self.presence_list.count()):
             item = self.presence_list.item(i)
             item.setHidden(text.lower() not in item.text().lower())
 
+# Funcția principală a aplicației
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
