@@ -1,6 +1,6 @@
 import cv2
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, simpledialog
 from PIL import Image, ImageTk
 import os
 
@@ -9,33 +9,26 @@ class FaceRecognitionApp:
         self.root = root
         self.root.title("Face Recognition App")
         
-        # URL for the video stream
         self.video_url = "http://192.168.0.234:4747/video"
         
-        # Initialize video capture
         self.video_capture = cv2.VideoCapture(self.video_url)
         
-        # Create GUI elements
         self.create_widgets()
         
-        # Profiles
         self.profiles = {}
         self.selected_profile = None
     
     def create_widgets(self):
-        # Create a label to display video feed
         self.video_label = tk.Label(self.root)
         self.video_label.pack()
         
-        # Create a button to capture photo
         self.capture_button = ttk.Button(self.root, text="Capture Photo", command=self.capture_photo)
         self.capture_button.pack()
         
-        # Create a combobox to select profiles
         self.profile_combobox = ttk.Combobox(self.root, values=["Create New Profile"])
         self.profile_combobox.pack()
         self.profile_combobox.bind("<<ComboboxSelected>>", self.select_profile)
-        
+    
     def show_video_feed(self):
         ret, frame = self.video_capture.read()
         if ret:
@@ -64,7 +57,7 @@ class FaceRecognitionApp:
     def select_profile(self, event):
         selected_profile = self.profile_combobox.get()
         if selected_profile == "Create New Profile":
-            new_profile = tk.simpledialog.askstring("New Profile", "Enter Profile Name:")
+            new_profile = simpledialog.askstring("New Profile", "Enter Profile Name:")
             if new_profile:
                 self.profiles[new_profile] = []
                 self.profile_combobox["values"] = list(self.profiles.keys()) + ["Create New Profile"]
@@ -76,5 +69,5 @@ class FaceRecognitionApp:
 if __name__ == "__main__":
     root = tk.Tk()
     app = FaceRecognitionApp(root)
-    app.show_video_feed()  # Start showing video feed
+    app.show_video_feed()  
     root.mainloop()
