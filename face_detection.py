@@ -2,17 +2,14 @@ import cv2
 import os
 import numpy as np
 import dlib
+from tkinter import Tk, Button, Label, Listbox, Entry, END, Scrollbar, Frame, BOTH, RIGHT, LEFT, Y, StringVar
+from PIL import Image, ImageTk
+import time
 
-# Load the pre-trained Haar cascade for face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-
-# Load the pre-trained face landmark predictor
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-
-# Load the pre-trained face recognition model
 face_recognizer = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
 
-# Function to load images from a directory
 def load_images_from_folder(folder):
     images = []
     for filename in os.listdir(folder):
@@ -21,7 +18,6 @@ def load_images_from_folder(folder):
             images.append(img)
     return images
 
-# Function to compute face descriptors
 def compute_face_descriptors(images):
     descriptors = []
     for img in images:
@@ -34,103 +30,163 @@ def compute_face_descriptors(images):
             descriptors.append(descriptor)
     return descriptors
 
-# Function to create a new profile
-def create_profile(profile_name):
-    os.makedirs(os.path.join("profiles", profile_name))
+def save_image(image, folder, filename):
+    cv2.imwrite(os.path.join(folder, filename), image)
 
-# Function to add pictures to a profile
-def add_picture_to_profile(profile_name, picture):
-    profile_folder = os.path.join("profiles", profile_name)
-    cv2.imwrite(os.path.join(profile_folder, f"{len(os.listdir(profile_folder)) + 1}.jpg"), picture)
+def update_known_faces():
+    global known_faces
+    for profile_name in sorted(os.listdir(profiles_folder)):
+        profile_folder = os.path.join(profiles_folder, profile_name)
+        if os.path.isdir(profile_folder) and profile_name not in known_faces:
+            images = load_images_from_folder(profile_folder)
+            descriptors = compute_face_descriptors(images)
+            known_faces[profile_name] = descriptors
 
-# Function to get all available profiles
-def get_available_profiles():
-    return [profile_name for profile_name in os.listdir("profiles") if os.path.isdir(os.path.join("profiles", profile_name))]
-
-# Load known faces from the "profiles" folder
+profiles_folder = "profiles"
 known_faces = {}
-for profile_name in get_available_profiles():
-    profile_folder = os.path.join("profiles", profile_name)
-    images = load_images_from_folder(profile_folder)
-    descriptors = compute_face_descriptors(images)
-    known_faces[profile_name] = descriptors
+update_known_faces()
 
-# Initialize variables for profile selection and new profile creation
-selected_profile = None
-new_profile_name = ""
-
-# Capture video from port 0
 cap = cv2.VideoCapture(0)
+root = Tk()
+root.title("Face Recognition and Photo Capture")
+video_label = Label(root)
+video_label.pack()
+entry_profile_name = Entry(root)
+create_profile_button = None
+last_recognized_face = None
 
-while cap.isOpened():
+def update_video_feed():
     ret, frame = cap.read()
-    if not ret:
-        break
-
-    # Convert the image to grayscale
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    # Detect faces using the Haar cascade
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-
-    # Iterate over detected faces
-    for (x, y, w, h) in faces:
-        face_roi = gray[y:y+h, x:x+w]
-
-        # Compute descriptor for the detected face
-        shape = predictor(gray, dlib.rectangle(x, y, x+w, y+h))
-        descriptor = face_recognizer.compute_face_descriptor(frame, shape)
-
-        # Compare with known faces
-        match_found = False
-        for name, descriptors in known_faces.items():
-            for known_descriptor in descriptors:
-                similarity = np.linalg.norm(np.array(descriptor) - np.array(known_descriptor))
-                if similarity < 0.6:  # Adjust the threshold as needed
-                    match_found = True
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                    cv2.putText(frame, name, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (36,255,12), 2)
+    if ret:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+        for (x, y, w, h) in faces:
+            face_roi = gray[y:y+h, x:x+w]
+            shape = predictor(gray, dlib.rectangle(x, y, x+w, y+h))
+            descriptor = face_recognizer.compute_face_descriptor(frame, shape)
+            match_found = False
+            for name, descriptors in known_faces.items():
+                for known_descriptor in descriptors:
+                    similarity = np.linalg.norm(np.array(descriptor) - np.array(known_descriptor))
+                    if similarity < 0.6:
+                        match_found = True
+                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                        cv2.putText(frame, name, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (36,255,12), 2)
+                        last_recognized_face = name
+                        break
+                if match_found:
                     break
-            if match_found:
-                break
+            if not match_found:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                cv2.putText(frame, "Unknown", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+        ratio = frame.shape[1] / frame.shape[0]
+        new_width = 640
+        new_height = int(new_width / ratio)
+        frame = cv2.resize(frame, (new_width, new_height))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame)
+        imgtk = ImageTk.PhotoImage(image=img)
+        video_label.imgtk = imgtk
+        video_label.configure(image=imgtk)
+    video_label.after(10, update_video_feed)
 
-        # If no match found, draw rectangle in red
-        if not match_found:
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
-            cv2.putText(frame, "Unknown", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+update_video_feed()
 
-    # Display available profiles
-    profiles = get_available_profiles()
-    profile_text = "Available Profiles: " + ", ".join(profiles)
-    cv2.putText(frame, profile_text, (10, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+def create_profile():
+    global create_profile_button
+    global entry_profile_name
+    if not create_profile_button:
+        create_profile_button = Button(root, text="Create", command=save_profile)
+        create_profile_button.pack()
+        entry_profile_name.pack()
 
-    # Display selected profile
-    if selected_profile:
-        cv2.putText(frame, "Selected Profile: " + selected_profile, (10, frame.shape[0] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+def save_profile():
+    profile_name = entry_profile_name.get()
+    if profile_name:
+        if not os.path.exists(os.path.join(profiles_folder, profile_name)):
+            os.makedirs(os.path.join(profiles_folder, profile_name))
+            update_known_faces()
+            selected_folder.insert(END, profile_name)
+            print(f"Profile '{profile_name}' created successfully.")
+        else:
+            print(f"Profile '{profile_name}' already exists.")
+    else:
+        print("Please enter a profile name.")
 
-    # Display new profile creation input
-    if new_profile_name:
-        cv2.putText(frame, "Creating Profile: " + new_profile_name, (10, frame.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+selected_folder_frame = Frame(root)
+selected_folder_scrollbar = Scrollbar(selected_folder_frame)
+selected_folder_scrollbar.pack(side=RIGHT, fill=Y)
+selected_folder = Listbox(selected_folder_frame, selectmode="single", height=5, yscrollcommand=selected_folder_scrollbar.set)
+for folder_name in sorted(known_faces.keys()):
+    selected_folder.insert(END, folder_name)
+selected_folder.pack(side=LEFT, fill=BOTH)
+selected_folder_scrollbar.config(command=selected_folder.yview)
+selected_folder_frame.pack()
 
-    # Display the frame
-    cv2.imshow('Face Recognition', frame)
+search_var = StringVar()
+search_var.trace("w", lambda name, index, mode, sv=search_var: search_profiles(sv))
+search_entry = Entry(root, textvariable=search_var)
+search_entry.pack()
 
-    # Check for key press events
-    key = cv2.waitKey(1)
-    if key == ord('q'):
-        break
-    elif key == ord('c'):  # Press 'c' to capture image for new profile or selected profile
-        if new_profile_name:
-            create_profile(new_profile_name)
-            known_faces[new_profile_name] = compute_face_descriptors([frame])
-            new_profile_name = ""
-        elif selected_profile:
-            add_picture_to_profile(selected_profile, frame)
-    elif key == ord('n'):  # Press 'n' to initiate new profile creation
-        new_profile_name = input("Enter profile name: ")
-    elif key == ord('s'):  # Press 's' to select a profile
-        selected_profile = input("Select profile: ")
+def search_profiles(search_var):
+    search_term = search_var.get().lower()
+    selected_folder.delete(0, END)
+    matches = [folder_name for folder_name in sorted(known_faces.keys()) if folder_name.lower().startswith(search_term)]
+    for folder_name in matches:
+        selected_folder.insert(END, folder_name)
+    if not matches:
+        selected_folder.insert(END, "No match")
 
-# Release the video capture object and close all windows
+def delete_profile():
+    if selected_folder.curselection():
+        index = selected_folder.curselection()[0]
+        folder_name = selected_folder.get(index)
+        profile_path = os.path.join(profiles_folder, folder_name)
+        if os.path.exists(profile_path):
+            import shutil
+            shutil.rmtree(profile_path)
+            del known_faces[folder_name]
+            selected_folder.delete(index)
+            print(f"Profile '{folder_name}' deleted successfully.")
+        else:
+            print(f"Profile '{folder_name}' does not exist.")
+    else:
+        print("Please select a profile to delete.")
+
+Button(root, text="Delete Profile", command=delete_profile).pack()
+
+def capture_image():
+    if selected_folder.curselection():
+        index = selected_folder.curselection()[0]
+        folder_name = selected_folder.get(index)
+        ret, frame = cap.read()
+        if ret:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+            for (x, y, w, h) in faces:
+                face_roi = gray[y:y+h, x:x+w]
+                shape = predictor(gray, dlib.rectangle(x, y, x+w, y+h))
+                descriptor = face_recognizer.compute_face_descriptor(frame, shape)
+                match_found = False
+                for name, descriptors in known_faces.items():
+                    for known_descriptor in descriptors:
+                        similarity = np.linalg.norm(np.array(descriptor) - np.array(known_descriptor))
+                        if similarity < 0.6:
+                            match_found = True
+                            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                            cv2.putText(frame, name, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (36,255,12), 2)
+                            break
+                    if match_found:
+                        break
+                if not match_found:
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                    cv2.putText(frame, "Unknown", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+            save_image(frame, os.path.join(profiles_folder, folder_name), f"image_{len(os.listdir(os.path.join(profiles_folder, folder_name))) + 1}.jpg")
+    else:
+        print("Please select a folder before capturing a photo.")
+
+Button(root, text="Capture Photo", command=capture_image).pack()
+Button(root, text="Exit", command=root.quit).pack()
+root.mainloop()
 cap.release()
 cv2.destroyAllWindows()
