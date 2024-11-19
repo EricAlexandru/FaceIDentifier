@@ -57,9 +57,33 @@ entrance_cap = cv2.VideoCapture(0)
 entrance_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 entrance_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+# Se setează camera pentru a utiliza un dispozitiv specific (ID-ul 1)
 exit_cap = cv2.VideoCapture(1)
-exit_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-exit_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+# Setează lățimea și înălțimea imaginii capturate
+# Aici am setat rezoluția la 1280x720, ceea ce este un HD standard
+exit_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+exit_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+# Se ajustează expunerea camerei. Valoarea poate varia între -10 și 0
+# -4 înseamnă o expunere ușor crescută, pentru a îmbunătăți luminozitatea
+exit_cap.set(cv2.CAP_PROP_EXPOSURE, -4)
+
+# Setează câștigul imaginii. Valoarea 0 înseamnă că nu amplificăm semnalul,
+# iar orice valoare mai mare va amplifica semnalul și poate introduce zgomot
+exit_cap.set(cv2.CAP_PROP_GAIN, 0)
+
+# Setează contrastul imaginii. Valoarea 0 este echilibrată, iar orice valoare mai mare
+# va face contrastul mai mare (mai multă diferență între culori deschise și întunecate)
+exit_cap.set(cv2.CAP_PROP_CONTRAST, 0.5)
+
+# Se ajustează saturația culorilor imaginii. Saturația mai mare înseamnă culori mai intense
+exit_cap.set(cv2.CAP_PROP_SATURATION, 0.5)
+
+# Setează claritatea imaginii. O valoare mai mare înseamnă o imagine mai clară, dar poate
+# introduce și mai mult zgomot dacă valoarea este prea mare
+exit_cap.set(cv2.CAP_PROP_SHARPNESS, 0.5)
+
 
 class MainWindow(QWidget):
     def __init__(self):
